@@ -1,11 +1,8 @@
 package mg.itu.annotation;
 
 import java.lang.annotation.*;
-
-
-@Target(ElementType.TYPE) 
-
+@Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface Controller {
-    
+public @interface UrlMapping {
+    String value();
 }
