@@ -5,54 +5,57 @@ import jakarta.servlet.*;
 import jakarta.servlet.http.*;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.HashMap;
+import mg.itu.mapping.Mapping;
+import mg.itu.util.ControllerScanner;
 
 public class FrontControllerServlet extends HttpServlet {
-    private List<String> listController;
+        private List<String> listController;
+        private Map<String, Mapping> urlMappings;
 
     public void init() throws ServletException {
+
         listController = new ArrayList<>();
-        
-        try{
+        urlMappings = new HashMap<>();
+
+        try {
+
             ServletContext context = getServletContext();
             String basePackage = context.getInitParameter("controllerPackage");
 
-            //chemin
             String path = basePackage.replace('.', '/');
-            String vraiPath = context.getRealPath("/WEB-INF/classes/" + path);
+            String realPath = context.getRealPath("/WEB-INF/classes/" + path);
 
-            //scan fichier
-            File dir = new File(vraiPath);
+            ControllerScanner scanner =
+                new ControllerScanner(basePackage, realPath);
 
-            for(File f : dir.listFiles()){
-                if(f.getName().endsWith(".class")){
-                    //enlever .class
-                    String className = basePackage + "." + f.getName().replace(".class", "");
+            listController = scanner.getListController();
+            urlMappings = scanner.getUrlMappings();
 
-                    Class<?> clazz = Class.forName(className);
+            System.out.println("Controllers = " + listController);
+            System.out.println("Mappings = " + urlMappings.keySet());
 
-                    if(clazz.isAnnotationPresent(mg.itu.annotation.Controller.class)){
-                        listController.add(className);
-                    }
-                }
-            }
-            System.out.println("Package = " + basePackage);
-            System.out.println("Path = " + vraiPath);
-
-
-
-        } catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
     
     protected void processRequest(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        response.setContentType("text/html");
         PrintWriter out = response.getWriter();
+        String uri = request.getRequestURI().replace(request.getContextPath(), "");
 
-        out.println("<h1>Front Controller</h1>");
-        out.println("<p>URL recue : " + request.getRequestURL() + "</p>");
-        out.println("<h2>Controllers detectes :</h2>");
-        out.println(listController);
+        Mapping m = urlMappings.get(uri);
+        // Mapping m = null;
+
+        out.println("<h2>URL = " + uri + "</h2>");
+
+        if (m != null) {
+            out.println("<p>Controller = " + m.getClassName() + "</p>");
+            out.println("<p>Methode = " + m.getMethodName() + "</p>");
+        } else {
+            out.println("<p>404 - mapping introuvable</p>");
+        }
 
     }
 
