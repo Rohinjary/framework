@@ -1,17 +1,26 @@
 package mg.itu.util;
 
-import java.io.*;
-import java.util.*;
+import java.io.File;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import mg.itu.annotation.Controller;
+import mg.itu.annotation.UrlMapping;
 import mg.itu.mapping.Mapping;
+import mg.itu.mapping.UrlMethod;
 
 public class ControllerScanner {
 
     private List<String> listController = new ArrayList<>();
-    private Map<String, Mapping> urlMappings = new HashMap<>();
+    private Map<UrlMethod, Mapping> urlMappings = new HashMap<>();
 
     public ControllerScanner(String basePackage, String realPath) {
 
         try {
+
             File dir = new File(realPath);
 
             for (File f : dir.listFiles()) {
@@ -19,27 +28,42 @@ public class ControllerScanner {
                 if (f.getName().endsWith(".class")) {
 
                     String className =
-                        basePackage + "." + f.getName().replace(".class", "");
+                            basePackage + "." + f.getName().replace(".class", "");
 
                     Class<?> clazz = Class.forName(className);
 
-                    // controller
-                    if (clazz.isAnnotationPresent(mg.itu.annotation.Controller.class)) {
+                    // Vérifier si la classe est un Controller
+                    if (clazz.isAnnotationPresent(Controller.class)) {
+
                         listController.add(className);
 
-                        // scanner methods
-                        for (java.lang.reflect.Method m : clazz.getDeclaredMethods()) {
+                        // Scanner toutes les méthodes
+                        for (Method m : clazz.getDeclaredMethods()) {
 
-                            if (m.isAnnotationPresent(mg.itu.annotation.UrlMapping.class)) {
+                            if (m.isAnnotationPresent(UrlMapping.class)) {
 
-                                String url = m.getAnnotation(
-                                    mg.itu.annotation.UrlMapping.class
-                                ).value();
+                                UrlMapping annotation =
+                                        m.getAnnotation(UrlMapping.class);
 
-                                urlMappings.put(
-                                    url,
-                                    new Mapping(className, m.getName())
-                                );
+                                String url = annotation.value();
+                                String httpMethod = annotation.method();
+
+                                UrlMethod urlMethod =
+                                        new UrlMethod(url, httpMethod);
+
+                                // Vérifier les doublons
+                                if (urlMappings.containsKey(urlMethod)) {
+                                    throw new Exception(
+                                            "URL deja declaree : "
+                                                    + httpMethod
+                                                    + " "
+                                                    + url);
+                                }
+
+                                Mapping mapping =
+                                        new Mapping(className, m.getName());
+
+                                urlMappings.put(urlMethod, mapping);
                             }
                         }
                     }
@@ -55,7 +79,7 @@ public class ControllerScanner {
         return listController;
     }
 
-    public Map<String, Mapping> getUrlMappings() {
+    public Map<UrlMethod, Mapping> getUrlMappings() {
         return urlMappings;
     }
 }
