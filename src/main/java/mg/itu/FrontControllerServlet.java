@@ -3,67 +3,88 @@ package mg.itu;
 import java.io.*;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Map;
-import java.util.HashMap;
-import mg.itu.mapping.Mapping;
-import mg.itu.util.ControllerScanner;
+import java.util.*;
+
+import mg.itu.mapping.*;
+import mg.itu.util.*;
+import mg.itu.controller.*;
 
 public class FrontControllerServlet extends HttpServlet {
-        private List<String> listController;
-        private Map<String, Mapping> urlMappings;
 
+    private Map<UrlMethod, Mapping> urlMappings;
+
+    
     public void init() throws ServletException {
-
-        listController = new ArrayList<>();
-        urlMappings = new HashMap<>();
-
         try {
-
             ServletContext context = getServletContext();
-            String basePackage = context.getInitParameter("controllerPackage");
 
-            String path = basePackage.replace('.', '/');
-            String realPath = context.getRealPath("/WEB-INF/classes/" + path);
+            ControllerScanner scanner = new ControllerScanner(
+                    context.getInitParameter("controllerPackage"),
+                    context.getRealPath("/WEB-INF/classes/mg/itu/controller")
+            );
 
-            ControllerScanner scanner =
-                new ControllerScanner(basePackage, realPath);
-
-            listController = scanner.getListController();
             urlMappings = scanner.getUrlMappings();
 
-            System.out.println("Controllers = " + listController);
-            System.out.println("Mappings = " + urlMappings.keySet());
+            System.out.println("Mappings chargés = " + urlMappings.keySet());
 
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
-    
-    protected void processRequest(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+
+
+    protected void processRequest(HttpServletRequest request,
+                                  HttpServletResponse response)
+            throws ServletException, IOException {
+
+        response.setContentType("text/html");
         PrintWriter out = response.getWriter();
-        String uri = request.getRequestURI().replace(request.getContextPath(), "");
 
-        Mapping m = urlMappings.get(uri);
-        // Mapping m = null;
+        try {
 
-        out.println("<h2>URL = " + uri + "</h2>");
+            // URL propre
+            String uri = request.getRequestURI();
+            String contextPath = request.getContextPath();
 
-        if (m != null) {
+            uri = uri.substring(contextPath.length());
+
+            String httpMethod = request.getMethod();
+
+            UrlMethod key = new UrlMethod(uri, httpMethod);
+
+            Mapping m = urlMappings.get(key);
+
+            // mapping introuvable => exception
+            if (m == null) {
+                throw new MappingNotFoundException(
+                        "Aucune mapping trouvé pour URL = "
+                                + uri + " et method = " + httpMethod
+                );
+            }
+
+            // affichage si OK
+            out.println("<h2>URL = " + uri + "</h2>");
+            out.println("<p>HTTP Method = " + httpMethod + "</p>");
             out.println("<p>Controller = " + m.getClassName() + "</p>");
             out.println("<p>Methode = " + m.getMethodName() + "</p>");
-        } else {
-            out.println("<p>404 - mapping introuvable</p>");
+
+        } catch (MappingNotFoundException e) {
+            out.println("<h2 style='color:red'>ERROR 404</h2>");
+            out.println("<pre>" + e.getMessage() + "</pre>");
+        } catch (Exception e) {
+            out.println("<h2 style='color:red'>ERROR SYSTEM</h2>");
+            out.println("<pre>" + e.getMessage() + "</pre>");
         }
-
     }
 
-    protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        processRequest(request, response);
+    protected void doGet(HttpServletRequest req, HttpServletResponse res)
+            throws ServletException, IOException {
+        processRequest(req, res);
     }
 
-    protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        processRequest(request, response);
+
+    protected void doPost(HttpServletRequest req, HttpServletResponse res)
+            throws ServletException, IOException {
+        processRequest(req, res);
     }
 }
