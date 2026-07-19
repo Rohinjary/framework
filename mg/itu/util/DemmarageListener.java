@@ -3,13 +3,6 @@ package mg.itu.util;
 import jakarta.servlet.*;
 import jakarta.servlet.annotation.WebListener;
 
-/**
- * Sprint 4 : c'est ICI, au demarrage de l'application (contextInitialized),
- * que tout le travail d'initialisation se fait : scan des Controllers,
- * construction de la Map<UrlMethod, Mapping>, puis on stocke le resultat
- * dans le ServletContext pour que le FrontControllerServlet n'ait plus qu'a
- * le relire dans son init() (sans refaire le scan a chaque redeploiement de servlet).
- */
 @WebListener
 public class DemmarageListener implements ServletContextListener {
 

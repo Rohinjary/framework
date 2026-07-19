@@ -13,16 +13,6 @@ import mg.itu.annotation.UrlMapping;
 import mg.itu.mapping.Mapping;
 import mg.itu.mapping.UrlMethod;
 
-/**
- * Scanne un package (donne par son nom, ex: "mg.itu.controller") a la recherche
- * de toutes les classes annotees @Controller, puis de toutes leurs methodes
- * annotees @UrlMapping, pour construire la Map<UrlMethod, Mapping> utilisee
- * par le FrontControllerServlet pour router les requetes.
- *
- * Avant : le scan se faisait via getRealPath(...) (chemin disque), ce qui casse
- * si l'appli est deployee en .war non explode. Ici on utilise le ClassLoader
- * (classpath), qui fonctionne dans tous les cas.
- */
 public class ControllerScanner {
 
     private List<String> listController = new ArrayList<>();

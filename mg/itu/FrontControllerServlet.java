@@ -2,71 +2,69 @@ package mg.itu;
 
 import java.io.*;
 import java.lang.reflect.Method;
-import java.util.*;
-
+import java.lang.reflect.Parameter;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
+import java.util.*;
 
-import mg.itu.mapping.Mapping;
-import mg.itu.mapping.UrlMethod;
-import mg.itu.util.MappingNotFoundException;
-import mg.itu.view.ModelAndView;
-import mg.itu.view.ViewResolver;
+import mg.itu.mapping.*;
+import mg.itu.util.*;
+import mg.itu.view.*;
 
-/**
- * Point d'entree unique (Front Controller) de toutes les requetes de l'appli.
- *
- * Principe :
- * 1) Au demarrage, DemmarageListener a deja scanne les @Controller / @UrlMapping
- *    et depose la Map<UrlMethod, Mapping> dans le ServletContext.
- * 2) init() recupere cette map une seule fois.
- * 3) A chaque requete (doGet/doPost -> processRequest) :
- *    - on construit la cle (url + methode HTTP)
- *    - on cherche le Mapping correspondant
- *    - si absent -> 404 (MappingNotFoundException)
- *    - si present -> on instancie le Controller, on invoque la methode par reflexion
- *      - si elle retourne un ModelAndView -> on resout la vue (ViewResolver),
- *        on pousse les attributs dans la request, et on forward vers la JSP
- *      - sinon -> on affiche simplement le resultat (texte)
- */
 public class FrontControllerServlet extends HttpServlet {
 
     private Map<UrlMethod, Mapping> urlMappings;
+    private Object springContext;
 
-    @Override
     public void init() throws ServletException {
-        urlMappings = (Map<UrlMethod, Mapping>) getServletContext().getAttribute("urlMapping");
+        try {
+            ServletContext context = getServletContext();
 
-        if (urlMappings == null) {
-            throw new ServletException(
-                    "Aucun mapping trouve dans le ServletContext. "
-                            + "Verifie que DemmarageListener s'est bien execute et que "
-                            + "le context-param 'controllerPackage' est defini dans web.xml.");
+            ControllerScanner scanner = new ControllerScanner(
+                    context.getInitParameter("controllerPackage"),
+                    context.getRealPath("/WEB-INF/classes/mg/itu/controller")
+            );
+
+            urlMappings = scanner.getUrlMappings();
+
+            springContext = context.getAttribute("springContext");
+
+            System.out.println("Mappings chargés = " + urlMappings.keySet());
+
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
-    protected void processRequest(HttpServletRequest request, HttpServletResponse response)
+
+    protected void processRequest(HttpServletRequest request,
+                                  HttpServletResponse response)
             throws ServletException, IOException {
 
         response.setContentType("text/html");
         PrintWriter out = response.getWriter();
 
         try {
+
             String uri = request.getRequestURI();
             String contextPath = request.getContextPath();
+
             uri = uri.substring(contextPath.length());
 
             String httpMethod = request.getMethod();
 
             UrlMethod key = new UrlMethod(uri, httpMethod);
-            Mapping mapping = urlMappings.get(key);
 
-            if (mapping == null) {
+            Mapping m = urlMappings.get(key);
+
+            if (m == null) {
                 throw new MappingNotFoundException(
-                        "Aucun mapping trouve pour URL = " + uri + " et method = " + httpMethod);
+                        "Aucune mapping trouvé pour URL = "
+                                + uri + " et method = " + httpMethod
+                );
             }
 
-            invoquer(mapping, request, response, out);
+            invoquer(m, request, response, out);
 
         } catch (MappingNotFoundException e) {
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
@@ -80,13 +78,16 @@ public class FrontControllerServlet extends HttpServlet {
         }
     }
 
-    private void invoquer(Mapping mapping, HttpServletRequest request, HttpServletResponse response, PrintWriter out)
-            throws Exception {
+    private void invoquer(Mapping mapping, HttpServletRequest request,
+                           HttpServletResponse response, PrintWriter out) throws Exception {
 
         Object instance = mapping.getClasse().getDeclaredConstructor().newInstance();
         Method methode = mapping.getMethode();
 
-        Object resultat = methode.invoke(instance);
+       
+        Object[] arguments = creerArguments(methode, springContext);
+
+        Object resultat = methode.invoke(instance, arguments);
 
         if (resultat instanceof ModelAndView) {
 
@@ -104,21 +105,34 @@ public class FrontControllerServlet extends HttpServlet {
             RequestDispatcher dispatcher = request.getRequestDispatcher(viewResolver.getCheminCompletVue());
             dispatcher.forward(request, response);
 
+        } else if (resultat == null) {
+            out.println("<p>Methode executee (pas de retour ModelAndView).</p>");
         } else {
-            // Le controller peut aussi renvoyer un simple texte/objet : on l'affiche tel quel
-            out.println("<p>" + (resultat == null ? "null" : resultat.toString()) + "</p>");
+            out.println("<p>" + resultat + "</p>");
         }
     }
 
-    @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-        processRequest(request, response);
+    private Object[] creerArguments(Method methode, Object springContext) {
+        Parameter[] parametres = methode.getParameters();
+        Object[] arguments = new Object[parametres.length];
+
+        for (int i = 0; i < parametres.length; i++) {
+            Parameter p = parametres[i];
+            if (springContext != null && p.getType().isAssignableFrom(springContext.getClass())) {
+                arguments[i] = springContext;
+            }
+        }
+        return arguments;
     }
 
-    @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response)
+    protected void doGet(HttpServletRequest req, HttpServletResponse res)
             throws ServletException, IOException {
-        processRequest(request, response);
+        processRequest(req, res);
+    }
+
+
+    protected void doPost(HttpServletRequest req, HttpServletResponse res)
+            throws ServletException, IOException {
+        processRequest(req, res);
     }
 }
