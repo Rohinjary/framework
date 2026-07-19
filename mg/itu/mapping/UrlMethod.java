@@ -2,11 +2,7 @@ package mg.itu.mapping;
 
 import java.util.Objects;
 
-/**
- * Represente la cle unique d'une route : une URL + une methode HTTP (GET/POST).
- * On la met en cle de Map pour pouvoir retrouver rapidement le controller
- * associe a une requete, et pour interdire 2 mappings identiques (meme url + meme methode).
- */
+
 public class UrlMethod {
 
     private String url;
