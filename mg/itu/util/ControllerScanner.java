@@ -2,7 +2,6 @@ package mg.itu.util;
 
 import java.io.File;
 import java.lang.reflect.Method;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -11,73 +10,53 @@ import java.util.Map;
 import mg.itu.annotation.Controller;
 import mg.itu.annotation.UrlMapping;
 import mg.itu.mapping.Mapping;
-import mg.itu.mapping.UrlMethod;
 
 public class ControllerScanner {
 
     private List<String> listController = new ArrayList<>();
     private Map<UrlMethod, Mapping> urlMappings = new HashMap<>();
 
-    public ControllerScanner(String basePackage) throws Exception {
+    public ControllerScanner(String basePackage, String realPath) {
 
-        String cheminDossier = basePackage.replace('.', '/');
+        try {
+            File dir = new File(realPath);
 
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        URL ressource = classLoader.getResource(cheminDossier);
+            for (File f : dir.listFiles()) {
 
-        if (ressource == null) {
-            throw new IllegalArgumentException("Le package " + basePackage + " n'existe pas (ou est vide).");
-        }
+                if (f.getName().endsWith(".class")) {
 
-        File dossier = new File(ressource.toURI());
+                    String className = basePackage + "." + f.getName().replace(".class", "");
+                    Class<?> clazz = Class.forName(className);
 
-        if (!dossier.exists() || !dossier.isDirectory()) {
-            throw new IllegalArgumentException("Le package " + basePackage + " n'est pas un dossier valide.");
-        }
+                    if (clazz.isAnnotationPresent(Controller.class)) {
 
-        File[] fichiers = dossier.listFiles();
-        if (fichiers == null) {
-            return;
-        }
+                        listController.add(className);
 
-        for (File fichier : fichiers) {
+                        for (Method m : clazz.getDeclaredMethods()) {
 
-            if (!fichier.isFile() || !fichier.getName().endsWith(".class")) {
-                continue;
-            }
+                            if (m.isAnnotationPresent(UrlMapping.class)) {
 
-            String className = basePackage + "." + fichier.getName().substring(0, fichier.getName().length() - 6);
+                                UrlMapping annotation = m.getAnnotation(UrlMapping.class);
+                                String url = annotation.value();
+                                String httpMethod = annotation.method();
 
-            Class<?> clazz = Class.forName(className);
+                                UrlMethod urlMethod = new UrlMethod(url, httpMethod);
 
-            if (!clazz.isAnnotationPresent(Controller.class)) {
-                continue;
-            }
+                                if (urlMappings.containsKey(urlMethod)) {
+                                    throw new RuntimeException("URL deja declaree : " + httpMethod + " " + url);
+                                }
 
-            listController.add(className);
-
-            for (Method m : clazz.getDeclaredMethods()) {
-
-                if (!m.isAnnotationPresent(UrlMapping.class)) {
-                    continue;
+                                Mapping mapping = new Mapping(clazz, m);
+                                urlMappings.put(urlMethod, mapping);
+                            }
+                        }
+                    }
                 }
-
-                UrlMapping annotation = m.getAnnotation(UrlMapping.class);
-
-                String url = annotation.value();
-                String httpMethod = annotation.method();
-
-                UrlMethod urlMethod = new UrlMethod(url, httpMethod);
-
-                // Verifier les doublons : 2 routes identiques (meme url + meme methode HTTP) interdites
-                if (urlMappings.containsKey(urlMethod)) {
-                    throw new Exception("URL deja declaree : " + httpMethod + " " + url);
-                }
-
-                Mapping mapping = new Mapping(clazz, m);
-
-                urlMappings.put(urlMethod, mapping);
             }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 

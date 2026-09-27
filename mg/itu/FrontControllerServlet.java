@@ -10,6 +10,8 @@ import java.util.*;
 import mg.itu.mapping.*;
 import mg.itu.util.*;
 import mg.itu.view.*;
+import mg.itu.annotation.ResponseBody;
+import mg.itu.json.JsonUtil;
 
 public class FrontControllerServlet extends HttpServlet {
 
@@ -26,7 +28,6 @@ public class FrontControllerServlet extends HttpServlet {
             );
 
             urlMappings = scanner.getUrlMappings();
-
             springContext = context.getAttribute("springContext");
 
             System.out.println("Mappings chargés = " + urlMappings.keySet());
@@ -36,7 +37,6 @@ public class FrontControllerServlet extends HttpServlet {
         }
     }
 
-
     protected void processRequest(HttpServletRequest request,
                                   HttpServletResponse response)
             throws ServletException, IOException {
@@ -45,22 +45,17 @@ public class FrontControllerServlet extends HttpServlet {
         PrintWriter out = response.getWriter();
 
         try {
-
             String uri = request.getRequestURI();
             String contextPath = request.getContextPath();
-
             uri = uri.substring(contextPath.length());
 
             String httpMethod = request.getMethod();
-
             UrlMethod key = new UrlMethod(uri, httpMethod);
-
             Mapping m = urlMappings.get(key);
 
             if (m == null) {
                 throw new MappingNotFoundException(
-                        "Aucune mapping trouvé pour URL = "
-                                + uri + " et method = " + httpMethod
+                        "Aucune mapping trouvé pour URL = " + uri + " et method = " + httpMethod
                 );
             }
 
@@ -84,10 +79,15 @@ public class FrontControllerServlet extends HttpServlet {
         Object instance = mapping.getClasse().getDeclaredConstructor().newInstance();
         Method methode = mapping.getMethode();
 
-       
         Object[] arguments = creerArguments(methode, springContext);
-
         Object resultat = methode.invoke(instance, arguments);
+
+        // truc de json
+        if (methode.isAnnotationPresent(ResponseBody.class)) {
+            response.setContentType("application/json;charset=UTF-8");
+            out.print(JsonUtil.toJson(resultat));
+            return;
+        }
 
         if (resultat instanceof ModelAndView) {
 
@@ -129,7 +129,6 @@ public class FrontControllerServlet extends HttpServlet {
             throws ServletException, IOException {
         processRequest(req, res);
     }
-
 
     protected void doPost(HttpServletRequest req, HttpServletResponse res)
             throws ServletException, IOException {
