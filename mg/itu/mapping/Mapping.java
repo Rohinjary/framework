@@ -12,19 +12,8 @@ public class Mapping {
         this.methode = methode;
     }
 
-    public Class<?> getClasse() {
-        return classe;
-    }
-
-    public void setClasse(Class<?> classe) {
-        this.classe = classe;
-    }
-
-    public Method getMethode() {
-        return methode;
-    }
-
-    public void setMethode(Method methode) {
-        this.methode = methode;
-    }
+    public Class<?> getClasse() { return classe; }
+    public void setClasse(Class<?> classe) { this.classe = classe; }
+    public Method getMethode() { return methode; }
+    public void setMethode(Method methode) { this.methode = methode; }
 }

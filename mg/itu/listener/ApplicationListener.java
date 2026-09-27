@@ -5,7 +5,6 @@ import jakarta.servlet.ServletContextEvent;
 import jakarta.servlet.ServletContextListener;
 import jakarta.servlet.annotation.WebListener;
 
-
 @WebListener
 public class ApplicationListener implements ServletContextListener {
 
@@ -22,7 +21,6 @@ public class ApplicationListener implements ServletContextListener {
                     .invoke(null, servletContext);
 
             servletContext.setAttribute("springContext", springContext);
-
             servletContext.log("## Spring detecte et recupere avec succes ##");
 
         } catch (Exception e) {
