@@ -79,7 +79,7 @@ public class FrontControllerServlet extends HttpServlet {
         Object instance = mapping.getClasse().getDeclaredConstructor().newInstance();
         Method methode = mapping.getMethode();
 
-        Object[] arguments = creerArguments(methode, springContext);
+        Object[] arguments = creerArguments(methode, springContext, request);
         Object resultat = methode.invoke(instance, arguments);
 
         // truc de json
@@ -92,6 +92,12 @@ public class FrontControllerServlet extends HttpServlet {
         if (resultat instanceof ModelAndView) {
 
             ModelAndView mv = (ModelAndView) resultat;
+            
+            if (mv.getNom_vue().startsWith("redirect:")) {
+                String url = mv.getNom_vue().substring("redirect:".length());
+                response.sendRedirect(request.getContextPath() + url);
+                return;
+            }
 
             ViewResolver viewResolver = new ViewResolver();
             viewResolver.setNom_vue(mv.getNom_vue());
@@ -105,21 +111,22 @@ public class FrontControllerServlet extends HttpServlet {
             RequestDispatcher dispatcher = request.getRequestDispatcher(viewResolver.getCheminCompletVue());
             dispatcher.forward(request, response);
 
-        } else if (resultat == null) {
-            out.println("<p>Methode executee (pas de retour ModelAndView).</p>");
-        } else {
-            out.println("<p>" + resultat + "</p>");
         }
     }
 
-    private Object[] creerArguments(Method methode, Object springContext) {
+    private Object[] creerArguments(Method methode, Object springContext, HttpServletRequest request) {
         Parameter[] parametres = methode.getParameters();
         Object[] arguments = new Object[parametres.length];
 
         for (int i = 0; i < parametres.length; i++) {
             Parameter p = parametres[i];
+
             if (springContext != null && p.getType().isAssignableFrom(springContext.getClass())) {
                 arguments[i] = springContext;
+            // truc de formulaire
+            } else if (p.getType().equals(String.class)) {
+                String valeur = request.getParameter(p.getName());
+                arguments[i] = valeur;
             }
         }
         return arguments;
