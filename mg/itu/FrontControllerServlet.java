@@ -114,22 +114,101 @@ public class FrontControllerServlet extends HttpServlet {
         }
     }
 
-    private Object[] creerArguments(Method methode, Object springContext, HttpServletRequest request) {
-        Parameter[] parametres = methode.getParameters();
-        Object[] arguments = new Object[parametres.length];
+private Object[] creerArguments(Method methode, Object springContext, HttpServletRequest request)
+        throws Exception {
 
-        for (int i = 0; i < parametres.length; i++) {
-            Parameter p = parametres[i];
+    Parameter[] parametres = methode.getParameters();
+    Object[] arguments = new Object[parametres.length];
 
-            if (springContext != null && p.getType().isAssignableFrom(springContext.getClass())) {
-                arguments[i] = springContext;
-            // truc de formulaire
-            } else if (p.getType().equals(String.class)) {
-                String valeur = request.getParameter(p.getName());
-                arguments[i] = valeur;
-            }
+    for (int i = 0; i < parametres.length; i++) {
+        Parameter p = parametres[i];
+        Class<?> type = p.getType();
+
+        if (springContext != null && type.isAssignableFrom(springContext.getClass())) {
+            // cas 1 : le contexte Spring
+            arguments[i] = springContext;
+
+        } else if (estTypeSimple(type)) {
+            // cas 2 : String, int, double, boolean...
+            arguments[i] = convertir(request.getParameter(p.getName()), type);
+
+        } else {
+            // cas 3 : un objet (Emp...) rempli depuis les champs du formulaire
+            arguments[i] = construireObjet(type, p.getName(), request);
         }
-        return arguments;
+    }
+    return arguments;
+}
+
+private boolean estTypeSimple(Class<?> t) {
+    return t == String.class
+            || t.isPrimitive()
+            || t == Integer.class || t == Long.class
+            || t == Double.class || t == Float.class
+            || t == Boolean.class;
+}
+
+/** Transforme le texte du formulaire dans le type attendu par la methode */
+private Object convertir(String valeur, Class<?> type) {
+
+    if (type == String.class) {
+        return valeur;
+    }
+
+    // champ absent ou vide : null pour les objets, valeur par defaut pour les primitifs
+    if (valeur == null || valeur.trim().isEmpty()) {
+        if (type == int.class) return 0;
+        if (type == long.class) return 0L;
+        if (type == double.class) return 0.0;
+        if (type == float.class) return 0f;
+        if (type == boolean.class) return false;
+        return null;
+    }
+
+    valeur = valeur.trim();
+
+    if (type == int.class || type == Integer.class) return Integer.parseInt(valeur);
+    if (type == long.class || type == Long.class) return Long.parseLong(valeur);
+    if (type == double.class || type == Double.class) return Double.parseDouble(valeur);
+    if (type == float.class || type == Float.class) return Float.parseFloat(valeur);
+    if (type == boolean.class || type == Boolean.class) {
+        return valeur.equalsIgnoreCase("true") || valeur.equals("on") || valeur.equals("1");
+    }
+    return null;
+}
+
+
+    private Object construireObjet(Class<?> classe, String nomParam, HttpServletRequest request)
+            throws Exception {
+
+        Object objet = classe.getDeclaredConstructor().newInstance();
+
+        for (Method m : classe.getMethods()) {
+
+            if (!m.getName().startsWith("set") || m.getName().length() <= 3
+                    || m.getParameterCount() != 1) {
+                continue;
+            }
+
+            Class<?> typeChamp = m.getParameterTypes()[0];
+            if (!estTypeSimple(typeChamp)) {
+                continue;
+            }
+
+            // setNom -> "nom"
+            String champ = Character.toLowerCase(m.getName().charAt(3)) + m.getName().substring(4);
+
+            String valeur = request.getParameter(nomParam + "." + champ);   // ex: emp.nom
+            if (valeur == null) {
+                valeur = request.getParameter(champ);                       // ex: nom
+            }
+            if (valeur == null) {
+                continue;   // pas envoye par le formulaire : on laisse la valeur par defaut
+            }
+
+            m.invoke(objet, convertir(valeur, typeChamp));
+        }
+        return objet;
     }
 
     protected void doGet(HttpServletRequest req, HttpServletResponse res)
