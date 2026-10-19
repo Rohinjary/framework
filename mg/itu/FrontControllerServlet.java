@@ -12,6 +12,7 @@ import mg.itu.util.*;
 import mg.itu.view.*;
 import mg.itu.annotation.ResponseBody;
 import mg.itu.json.JsonUtil;
+import mg.itu.upload.UploadedFile;
 
 public class FrontControllerServlet extends HttpServlet {
 
@@ -114,6 +115,7 @@ public class FrontControllerServlet extends HttpServlet {
         }
     }
 
+// upload file + formulaire maka parametre sy comparaison
 private Object[] creerArguments(Method methode, Object springContext, HttpServletRequest request)
         throws Exception {
 
@@ -125,21 +127,49 @@ private Object[] creerArguments(Method methode, Object springContext, HttpServle
         Class<?> type = p.getType();
 
         if (springContext != null && type.isAssignableFrom(springContext.getClass())) {
-            // cas 1 : le contexte Spring
             arguments[i] = springContext;
 
+        } else if (type == UploadedFile.class) {
+            //  fichier envoye par le formulaire upload
+            arguments[i] = lireFichier(request, p.getName());
+
         } else if (estTypeSimple(type)) {
-            // cas 2 : String, int, double, boolean...
             arguments[i] = convertir(request.getParameter(p.getName()), type);
 
         } else {
-            // cas 3 : un objet (Emp...) rempli depuis les champs du formulaire
             arguments[i] = construireObjet(type, p.getName(), request);
         }
     }
     return arguments;
 }
 
+private UploadedFile lireFichier(HttpServletRequest request, String champ) throws Exception {
+
+    // pas un formulaire multipart : pas de fichier
+    String ct = request.getContentType();
+    if (ct == null || !ct.toLowerCase().startsWith("multipart/")) {
+        return null;
+    }
+
+    Part part = request.getPart(champ);   // "champ" = name="..." de l'input file
+    if (part == null || part.getSize() == 0) {
+        return null;   // aucun fichier choisi
+    }
+
+    String nom = part.getSubmittedFileName();
+    if (nom == null || nom.isEmpty()) {
+        return null;
+    }
+
+    byte[] contenu;
+    try (InputStream in = part.getInputStream()) {
+        contenu = in.readAllBytes();
+    }
+
+    return new UploadedFile(nom, part.getContentType(), contenu);
+}
+
+// formulaire simple objet
 private boolean estTypeSimple(Class<?> t) {
     return t == String.class
             || t.isPrimitive()
@@ -148,14 +178,14 @@ private boolean estTypeSimple(Class<?> t) {
             || t == Boolean.class;
 }
 
-/** Transforme le texte du formulaire dans le type attendu par la methode */
+/** Transforme le text form par methode azo */
 private Object convertir(String valeur, Class<?> type) {
 
     if (type == String.class) {
         return valeur;
     }
 
-    // champ absent ou vide : null pour les objets, valeur par defaut pour les primitifs
+    // champ absent ou vide
     if (valeur == null || valeur.trim().isEmpty()) {
         if (type == int.class) return 0;
         if (type == long.class) return 0L;
@@ -203,7 +233,7 @@ private Object convertir(String valeur, Class<?> type) {
                 valeur = request.getParameter(champ);                       // ex: nom
             }
             if (valeur == null) {
-                continue;   // pas envoye par le formulaire : on laisse la valeur par defaut
+                continue;  
             }
 
             m.invoke(objet, convertir(valeur, typeChamp));
