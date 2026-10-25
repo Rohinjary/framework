@@ -17,11 +17,13 @@ import mg.itu.upload.UploadedFile;
 import java.util.concurrent.ConcurrentHashMap;
 import mg.itu.session.Session;
 
+import mg.itu.annotation.Auth;
 public class FrontControllerServlet extends HttpServlet {
 
     private Map<UrlMethod, Mapping> urlMappings;
     private Object springContext;
     private final Map<Class<?>, Object> controleurs = new ConcurrentHashMap<>();
+    private String cleAuthentification;  
 
     public void init() throws ServletException {
         try {
@@ -34,6 +36,7 @@ public class FrontControllerServlet extends HttpServlet {
 
             urlMappings = scanner.getUrlMappings();
             springContext = context.getAttribute("springContext");
+            cleAuthentification = context.getInitParameter("variable-authentification-check");
 
             System.out.println("Mappings chargés = " + urlMappings.keySet());
 
@@ -70,7 +73,13 @@ public class FrontControllerServlet extends HttpServlet {
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
             out.println("<h2 style='color:red'>ERROR 404</h2>");
             out.println("<pre>" + e.getMessage() + "</pre>");
-        } catch (Exception e) {
+
+        } catch (AuthentificationException e) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            out.println("<h2 style='color:red'>ERROR 401</h2>");
+            out.println("<pre>" + e.getMessage() + "</pre>");
+        }
+        catch (Exception e) {
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             out.println("<h2 style='color:red'>ERROR SYSTEM</h2>");
             out.println("<pre>" + e.getMessage() + "</pre>");
@@ -83,6 +92,10 @@ public class FrontControllerServlet extends HttpServlet {
 
         Object instance = getControleur(mapping.getClasse());
         Method methode = mapping.getMethode();
+
+        if (methode.isAnnotationPresent(Auth.class)) {
+            verifierAuthentification(request);
+        }
 
         Object[] arguments = creerArguments(methode, springContext, request);
         Object resultat = methode.invoke(instance, arguments);
@@ -265,6 +278,22 @@ public class FrontControllerServlet extends HttpServlet {
         processRequest(req, res);
     }
 
+    private void verifierAuthentification(HttpServletRequest request) {
+
+        if (cleAuthentification == null || cleAuthentification.trim().isEmpty()) {
+            throw new IllegalStateException(
+                    "Methode @Auth utilisee mais le parametre 'variable-authentification-check' "
+                            + "est absent ou vide dans web.xml");
+        }
+
+        // false = ne cree PAS de session si l'utilisateur n'en a pas
+        HttpSession httpSession = request.getSession(false);
+
+        if (httpSession == null || httpSession.getAttribute(cleAuthentification) == null) {
+            throw new AuthentificationException(
+                    "Authentification requise : connectez-vous avant d'acceder a cette page");
+        }
+    }
     /** Un seul objet par classe de controller, cree au premier usage. */
     private Object getControleur(Class<?> classe) throws Exception {
         Object instance = controleurs.get(classe);
