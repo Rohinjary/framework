@@ -24,6 +24,7 @@ public class FrontControllerServlet extends HttpServlet {
     private Object springContext;
     private final Map<Class<?>, Object> controleurs = new ConcurrentHashMap<>();
     private String cleAuthentification;  
+    private String cleRole;  
 
     public void init() throws ServletException {
         try {
@@ -37,6 +38,7 @@ public class FrontControllerServlet extends HttpServlet {
             urlMappings = scanner.getUrlMappings();
             springContext = context.getAttribute("springContext");
             cleAuthentification = context.getInitParameter("variable-authentification-check");
+            cleRole = context.getInitParameter("variable-role-check");
 
             System.out.println("Mappings chargés = " + urlMappings.keySet());
 
@@ -78,8 +80,11 @@ public class FrontControllerServlet extends HttpServlet {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             out.println("<h2 style='color:red'>ERROR 401</h2>");
             out.println("<pre>" + e.getMessage() + "</pre>");
-        }
-        catch (Exception e) {
+        } catch (AutorisationException e) {
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            out.println("<h2 style='color:red'>ERROR 403</h2>");
+            out.println("<pre>" + e.getMessage() + "</pre>");
+        }catch (Exception e) {
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             out.println("<h2 style='color:red'>ERROR SYSTEM</h2>");
             out.println("<pre>" + e.getMessage() + "</pre>");
@@ -93,14 +98,15 @@ public class FrontControllerServlet extends HttpServlet {
         Object instance = getControleur(mapping.getClasse());
         Method methode = mapping.getMethode();
 
-        if (methode.isAnnotationPresent(Auth.class)) {
-            verifierAuthentification(request);
-        }
+            Auth auth = methode.getAnnotation(Auth.class);
+            if (auth != null) {
+                verifierAuthentification(request, auth);
+            }
 
         Object[] arguments = creerArguments(methode, springContext, request);
         Object resultat = methode.invoke(instance, arguments);
 
-        // Recopie la Session du developpeur dans la vraie HttpSession AVANT le JSON, le redirect et le forwar
+        // Recopie Session developpeur dans HttpSession
 
         for (Object arg : arguments) {
             if (arg instanceof Session) {
@@ -278,7 +284,7 @@ public class FrontControllerServlet extends HttpServlet {
         processRequest(req, res);
     }
 
-    private void verifierAuthentification(HttpServletRequest request) {
+    private void verifierAuthentification(HttpServletRequest request, Auth auth) {
 
         if (cleAuthentification == null || cleAuthentification.trim().isEmpty()) {
             throw new IllegalStateException(
@@ -286,13 +292,39 @@ public class FrontControllerServlet extends HttpServlet {
                             + "est absent ou vide dans web.xml");
         }
 
-        // false = ne cree PAS de session si l'utilisateur n'en a pas
         HttpSession httpSession = request.getSession(false);
 
+        // 1)  l'authentification
         if (httpSession == null || httpSession.getAttribute(cleAuthentification) == null) {
             throw new AuthentificationException(
                     "Authentification requise : connectez-vous avant d'acceder a cette page");
         }
+
+        // 2) le role (si @Auth(role=...))
+        String[] rolesAutorises = auth.role();
+        if (rolesAutorises.length == 0) {
+            return;   // @Auth simple : etre connecte suffit
+        }
+
+        if (cleRole == null || cleRole.trim().isEmpty()) {
+            throw new IllegalStateException(
+                    "@Auth(role=...) utilise mais le parametre 'variable-role-check' "
+                            + "est absent ou vide dans web.xml");
+        }
+
+        Object roleUtilisateur = httpSession.getAttribute(cleRole);
+
+        if (roleUtilisateur != null) {
+            for (String role : rolesAutorises) {
+                if (role.equals(roleUtilisateur.toString())) {
+                    return;   // role accepte
+                }
+            }
+        }
+
+        throw new AutorisationException(
+                "Acces refuse : role requis = " + Arrays.toString(rolesAutorises)
+                        + ", votre role = " + roleUtilisateur);
     }
     /** Un seul objet par classe de controller, cree au premier usage. */
     private Object getControleur(Class<?> classe) throws Exception {
@@ -309,7 +341,7 @@ public class FrontControllerServlet extends HttpServlet {
         return instance;
     }
 
-    /** HttpSession -> Session (copie). */
+    /** HttpSession -> Session (copie) */
     private Session chargerSession(HttpServletRequest request) {
         HttpSession httpSession = request.getSession();   // la cree si elle n'existe pas
         Session session = new Session();
@@ -326,7 +358,7 @@ public class FrontControllerServlet extends HttpServlet {
     private void sauvegarderSession(Session session, HttpServletRequest request) {
         HttpSession httpSession = request.getSession();
 
-        // 1. retirer les cles que le controller a supprimees
+        // retirer les cles que le controller a supprimees
         List<String> aSupprimer = new ArrayList<>();
         Enumeration<String> noms = httpSession.getAttributeNames();
         while (noms.hasMoreElements()) {
@@ -339,7 +371,7 @@ public class FrontControllerServlet extends HttpServlet {
             httpSession.removeAttribute(nom);
         }
 
-        // 2. ecrire les cles ajoutees ou modifiees
+        // ecrire les cles ajoutees ou modifiees
         for (Map.Entry<String, Object> e : session.getDonnees().entrySet()) {
             httpSession.setAttribute(e.getKey(), e.getValue());
         }
