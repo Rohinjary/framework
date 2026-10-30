@@ -13,8 +13,6 @@ import mg.itu.view.*;
 import mg.itu.annotation.ResponseBody;
 import mg.itu.json.JsonUtil;
 import mg.itu.upload.UploadedFile;
-
-import java.util.concurrent.ConcurrentHashMap;
 import mg.itu.session.Session;
 
 import mg.itu.annotation.Auth;
@@ -22,7 +20,6 @@ public class FrontControllerServlet extends HttpServlet {
 
     private Map<UrlMethod, Mapping> urlMappings;
     private Object springContext;
-    private final Map<Class<?>, Object> controleurs = new ConcurrentHashMap<>();
     private String cleAuthentification;  
     private String cleRole;  
 
@@ -95,7 +92,8 @@ public class FrontControllerServlet extends HttpServlet {
     private void invoquer(Mapping mapping, HttpServletRequest request,
                            HttpServletResponse response, PrintWriter out) throws Exception {
 
-        Object instance = getControleur(mapping.getClasse());
+        // Object instance = getControleur(mapping.getClasse());
+        Object instance = ControllerFactory.getInstance().getControleur(mapping.getClasse());
         Method methode = mapping.getMethode();
 
             Auth auth = methode.getAnnotation(Auth.class);
@@ -327,19 +325,19 @@ public class FrontControllerServlet extends HttpServlet {
                         + ", votre role = " + roleUtilisateur);
     }
     /** Un seul objet par classe de controller, cree au premier usage. */
-    private Object getControleur(Class<?> classe) throws Exception {
-        Object instance = controleurs.get(classe);
-        if (instance == null) {
-            synchronized (this) {
-                instance = controleurs.get(classe);
-                if (instance == null) {
-                    instance = classe.getDeclaredConstructor().newInstance();
-                    controleurs.put(classe, instance);
-                }
-            }
-        }
-        return instance;
-    }
+    // private Object getControleur(Class<?> classe) throws Exception {
+    //     Object instance = controleurs.get(classe);
+    //     if (instance == null) {
+    //         synchronized (this) {
+    //             instance = controleurs.get(classe);
+    //             if (instance == null) {
+    //                 instance = classe.getDeclaredConstructor().newInstance();
+    //                 controleurs.put(classe, instance);
+    //             }
+    //         }
+    //     }
+    //     return instance;
+    // }
 
     /** HttpSession -> Session (copie) */
     private Session chargerSession(HttpServletRequest request) {
